@@ -10,10 +10,17 @@ import MainApp from "./MainApp";
 import { AppProvider } from "./context/AppContext";
 import Register from "./Register";
 import RedirectIfLoggedIn from "./RedirectIfLogin";
+import { Toaster } from "react-hot-toast";
 
 export default function App() {
   return (
     <Router>
+      <div>
+        <Toaster
+          position="top-right"
+          reverseOrder={false}
+        />
+      </div>
       <AppProvider>
         <div>
           <Routes>

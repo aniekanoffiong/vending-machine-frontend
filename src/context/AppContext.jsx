@@ -1,13 +1,18 @@
-import { createContext, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import configData from '../../config';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const AppContext = createContext({});
 
 const axiosInstance = axios.create({
+    withCredentials: true,
     baseURL: configData.API_HOST,
+    credentials: 'include',
     headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
         'Access-Control-Allow-Credentials': true
     }
 })
@@ -15,8 +20,31 @@ const axiosInstance = axios.create({
 function AppProvider({ children }) {
     const [user, setUser] = useState(null);
     const [products, setProducts] = useState(null);
-    const [alertMessage, setAlertMessage]= useState("");
     const navigate = useNavigate();
+        
+    const setAlertMessage = (message, type) => {
+        toast[type || "success"](message)
+    }
+
+    const checkAuthState = () => {
+        axiosInstance.post(`/api/auth`)
+            .then(({data}) => {
+                localStorage.setItem("user", JSON.stringify(data));
+                setUser(data);
+                navigate('/app');
+                getProducts();
+            }).catch(handleApiFailure);
+    }
+
+    const handleApiFailure = (error) => {
+        console.log("checking api failure", error);
+        if (error.response?.status === 401) {
+            localStorage.removeItem("user");
+            navigate('/')
+            setAlertMessage("Account has been logged out");
+        }
+        setAlertMessage(error.response?.message || error.response?.data?.message);
+    }
 
     const handleAuthSubmission = function(e, formData) {
         e.preventDefault();
@@ -26,6 +54,9 @@ function AppProvider({ children }) {
                 setUser(data);
                 navigate('/app');
                 getProducts();
+            }).catch((err) => {
+                console.log(err);
+                setAlertMessage(err.response.data.message);
             });
     }
 
@@ -37,24 +68,73 @@ function AppProvider({ children }) {
                 setUser(data);
                 navigate('/app');
                 getProducts();
+            }).catch((err) => {
+                console.log(err);
+                setAlertMessage(err.response.data.message);
             });
     }
 
     const getProducts = () => {
         axiosInstance.get(`/api/products`)
-            .then(({data}) => setProducts(data));
+            .then(({data}) => setProducts(data))
+            .catch(handleApiFailure);
     }
 
-    const deposit = (e, formData) => {
+    const createProduct = async (formData) => {
+        axiosInstance.post(`/api/products`, formData)
+            .then(({data}) => {
+                setProducts([...products, ...[data]])
+                setAlertMessage("Product successfully created")
+            })
+            .catch(handleApiFailure);
+    }
+
+    const updateProduct = async (productId, formData) => {
+        axiosInstance.put(`/api/products/${productId}`, formData)
+            .then(({data}) => {
+                setProducts(products.map(item => {
+                    if (item.id === formData.id) {
+                        item = data;
+                    }
+                    return item;
+                }))
+                setAlertMessage("Product successfully updated")
+            })
+            .catch(handleApiFailure);
+    }
+
+    const deleteProduct = async (productId) => {
+        axiosInstance.delete(`/api/products/${productId}`)
+            .then(({data}) => {
+                setProducts(products.filter(item => item.id !== productId))
+                setAlertMessage("Product successfully deleted")
+            })
+            .catch(handleApiFailure);
+    }
+
+    const deposit = async (e, formData) => {
         e.preventDefault();
         axiosInstance.post(`/api/deposit`, formData)
-            .then(({data}) => setAlertMessage(data.message));
+            .then(({data}) => {
+                setUser({...user, deposit: data.newBalance})
+                setAlertMessage(data.message)
+            }).catch(handleApiFailure);
     }
 
-    const buyProduct = (e, formData) => {
+    const buyProduct = async (e, formData) => {
         e.preventDefault();
         axiosInstance.post(`/api/buy`, formData)
-            .then(({data}) => setAlertMessage(data.message));
+            .then(({data}) => {
+                setUser({...user, deposit: user.deposit - data.totalSpent})
+                setProducts(products.map(item => {
+                    if (item.id === formData.productId) {
+                        item.amountAvailable = data.purchasedProducts.product.amountAvailable; 
+                    }
+                    return item;
+                }))
+                setAlertMessage("Successfully bought product")
+            })
+            .catch(handleApiFailure);
     }
 
     const logout = (e) => {
@@ -63,19 +143,15 @@ function AppProvider({ children }) {
             .then(() => {
                 localStorage.removeItem("user");
                 setAlertMessage("Logout successful");
-            }).catch((err) => {
-                localStorage.removeItem("user");
-                setAlertMessage("Logout successful");
-            });
+            }).catch(handleApiFailure);
     }
 
-    const logoutAll = (e) => {
+    const logoutAll = async (e) => {
         e.preventDefault();
         axiosInstance.post(`/api/logout/all`, {})
             .then(() => {
-                localStorage.removeItem("user");
                 setAlertMessage("All other accounts have been logged out");
-            });
+            }).catch(handleApiFailure);
     }
   
     return (
@@ -86,9 +162,14 @@ function AppProvider({ children }) {
             setUser,
             deposit,
             register,
+            products,
             logoutAll,
             buyProduct,
             getProducts,
+            createProduct,
+            updateProduct,
+            deleteProduct,
+            checkAuthState,
             handleAuthSubmission,
         }}>
           {children}
@@ -96,4 +177,4 @@ function AppProvider({ children }) {
     );
 }
   
-  export { AppProvider, AppContext };
+export { AppProvider, AppContext };

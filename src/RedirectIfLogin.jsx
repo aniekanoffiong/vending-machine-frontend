@@ -1,9 +1,9 @@
-import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import React, { useContext } from 'react';
+import { Navigate } from 'react-router-dom';
+import { AppContext } from './context/AppContext';
 
 const RedirectIfLoggedIn = ({children}) => {
   let userItem = localStorage.getItem("user");
-  console.log(userItem)
   return userItem ? <Navigate to="/app" /> : children;
 }
 
